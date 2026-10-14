@@ -39,6 +39,7 @@
         font-size: clamp(34px, 7.4vw, 76px); line-height: 0.9; letter-spacing: 0.01em;
       }
       h1 span { color: var(--red); display: block; }
+      .small a { color: inherit; }
       .tag { margin: 12px 0 18px; color: var(--dim); font-size: clamp(13px, 1.9vw, 16px); line-height: 1.45; max-width: 34em; }
       .bar { height: 8px; background: rgba(255, 255, 255, 0.12); border-radius: 4px; overflow: hidden; }
       .bar i { display: block; height: 100%; width: 0%; background: var(--red); transition: width 0.2s ease; }
@@ -87,7 +88,7 @@
           <div class="bar"><i id="fill"></i></div>
           <div id="status">Loading the march…</div>
           <button id="play" type="button">PLAY</button>
-          <div class="small">Prototype · placeholder art and sound</div>
+          <div class="small">v0.10.0 · prototype, placeholder art and sound · <a href="https://protestsimulator.com/updates/" target="_blank" rel="noopener">what's new</a></div>
         </div>
         <div class="controls">
           <div class="for-touch">
@@ -156,16 +157,103 @@
           streamingAssetsUrl: "StreamingAssets",
           companyName: "DefaultCompany",
           productName: "Protest Simulator",
-          productVersion: "0.1.0",
+          productVersion: "0.10.0",
           // Phones have very dense screens; drawing every pixel would cost frame rate for detail nobody sees.
           devicePixelRatio: touch ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
         };
 
-        var instance = null;
-        createUnityInstance(canvas, config, function (p) {
+        // ==ps-loader== (protestsimulator.com's tools/prepare.mjs copies this block into already-built pages)
+        var instance = null, stage = 'start';
+        var shown = function (p) {
           fill.style.width = Math.round(p * 100) + '%';
           status.textContent = p < 0.9 ? 'Loading the march… ' + Math.round(p * 100) + '%' : 'Gathering the crowd…';
-        }).then(function (u) {
+        };
+
+        // When something breaks, tell the site so it can be fixed: the error, how far it got, the browser and screen
+        // (nothing personal). Unity's own error pop-ups still show.
+        var reports = 0;
+        var report = function (kind, err) {
+          try {
+            if (reports++ >= 5 || location.protocol !== 'https:') return;   // (not when testing locally)
+            var body = JSON.stringify({
+              kind: kind, msg: String((err && (err.stack || err.message)) || err).slice(0, 1500), stage: stage,
+              page: location.pathname, version: config.productVersion, ua: navigator.userAgent,
+              mem: navigator.deviceMemory || null, cores: navigator.hardwareConcurrency || null,
+              screen: screen.width + 'x' + screen.height + '@' + (window.devicePixelRatio || 1), touch: touch,
+            });
+            // Sent to protestsimulator.com from any copy (the GitHub one too), as plain text so no permission check is needed.
+            var to = 'https://protestsimulator.com/api/report';
+            if (navigator.sendBeacon) navigator.sendBeacon(to, new Blob([body], { type: 'text/plain' }));
+            else fetch(to, { method: 'POST', body: body, mode: 'no-cors', keepalive: true });
+          } catch (e) {}
+        };
+        window.addEventListener('error', function (e) { report('error', e.error || e.message); });
+        window.addEventListener('unhandledrejection', function (e) { report('rejection', e.reason); });
+        config.errorHandler = function (msg) { report('unity', msg); return false; };
+
+        // A phone that runs out of memory kills the page outright (iPhone: "A problem repeatedly occurred"), so no
+        // error fires: keep a note of how far it got, and if the next visit finds the note still there, report it then.
+        var note = function (s) { stage = s; try { localStorage.setItem('ps_stage', JSON.stringify({ stage: s, t: Date.now() })); } catch (e) {} };
+        try {
+          var last = JSON.parse(localStorage.getItem('ps_stage') || 'null');
+          if (last && Date.now() - last.t < 864e5) report('crash', 'the last visit stopped while ' + last.stage + ' (' + Math.round((Date.now() - last.t) / 1000) + ' s ago)');
+        } catch (e) {}
+        window.addEventListener('pagehide', function () { try { localStorage.removeItem('ps_stage'); } catch (e) {} });
+        note('starting');
+
+        // Hosts with a per-file size cap (Cloudflare: 25 MB) get the game data as numbered parts listed in
+        // Build/parts.json, each sent compressed and unpacked by the browser itself. They're streamed to Unity one
+        // after another as if they were one file, so there's never a second copy in memory (phones can't spare it).
+        // Without parts.json it loads the usual way.
+        var realFetch = window.fetch.bind(window);
+        var partsResponse = function (list) {
+          var k = 0, reader = null, next = null;
+          var open = function (i) {
+            return realFetch('Build/' + list.data[i]).then(function (r) {
+              if (!r.ok) throw new Error('game data part ' + i + ': HTTP ' + r.status);
+              return r;
+            });
+          };
+          var stream = new ReadableStream({
+            pull: function (ctl) {
+              var step = function () {
+                if (!reader) {
+                  if (k >= list.data.length) { ctl.close(); return; }
+                  var cur = next || open(k);
+                  next = k + 1 < list.data.length ? open(k + 1) : null;   // the next part downloads while this one is read
+                  k++;
+                  return cur.then(function (r) { reader = r.body.getReader(); return step(); });
+                }
+                return reader.read().then(function (x) {
+                  if (x.done) { reader = null; return step(); }
+                  ctl.enqueue(x.value);
+                });
+              };
+              return Promise.resolve().then(step).catch(function (e) { report('parts', e); ctl.error(e); });
+            },
+          });
+          return new Response(stream, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(list.bytes) } });
+        };
+        realFetch('Build/parts.json', { cache: 'no-cache' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; })
+          .then(function (list) {
+            if (list && list.data) {
+              config.frameworkUrl = 'Build/' + list.framework;
+              config.codeUrl = 'Build/' + list.code;
+              config.dataUrl = 'Build/parts-data';
+              config.cacheControl = function () { return 'no-store'; };   // the parts sit in the browser's own cache
+              window.fetch = function (input, init) {
+                var url = typeof input === 'string' ? input : (input && input.url) || '';
+                return url.indexOf('Build/parts-data') >= 0 ? Promise.resolve(partsResponse(list)) : realFetch(input, init);
+              };
+            }
+            note('loading');
+            return createUnityInstance(canvas, config, shown);
+          })
+          .then(function (u) { note('ready'); return u; }, function (e) { report('load', e); throw e; })
+        // ==/ps-loader==
+        .then(function (u) {
           instance = u;
           fill.style.width = '100%';
           status.textContent = 'Ready.';
@@ -187,6 +275,9 @@
           }
           screenEl.classList.add('gone');
           canvas.focus();
+          // In the game: the phone zooms in on our hero and play starts.
+          note('playing');
+          try { if (instance) instance.SendMessage('TitleScreen', 'StartFromPage'); } catch (e) {}
           setTimeout(function () { screenEl.style.display = 'none'; }, 400);
         });
       })();
