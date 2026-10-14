@@ -50,6 +50,13 @@
         box-shadow: 0 8px 30px rgba(232, 67, 46, 0.35);
       }
       #play.ready { display: inline-block; animation: pulse 1.6s ease-in-out infinite; }
+      /* The other version: Goat Simulator silliness, slapped on like a sticker. */
+      #play-unhinged {
+        margin: 16px 0 0 10px; display: none; border: 3px solid var(--red); border-radius: 999px; padding: 11px 26px; cursor: pointer;
+        background: #fff; color: var(--red); font: 800 clamp(15px, 2.2vw, 19px)/1 Impact, "Arial Black", sans-serif; letter-spacing: 0.06em;
+        transform: rotate(-4deg);
+      }
+      #play-unhinged.ready { display: inline-block; }
       @keyframes pulse { 50% { transform: scale(1.04); } }
       .controls { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 14px 16px; font-size: clamp(12px, 1.7vw, 14px); line-height: 1.5; }
       .controls h2 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red); }
@@ -87,8 +94,8 @@
           <p class="tag">Thousands of people marching through Anywhere, USA. Push through the crowd, pick things up, get filmed, start something. Everyone remembers who threw it.</p>
           <div class="bar"><i id="fill"></i></div>
           <div id="status">Loading the march…</div>
-          <button id="play" type="button">PLAY</button>
-          <div class="small">v0.10.0 · prototype, placeholder art and sound · <a href="https://protestsimulator.com/updates/" target="_blank" rel="noopener">what's new</a></div>
+          <button id="play" type="button">PLAY</button><button id="play-unhinged" type="button">UNHINGED</button>
+          <div class="small">v0.11.0 · prototype, placeholder art and sound · <a href="https://protestsimulator.com/updates/" target="_blank" rel="noopener">what's new</a></div>
         </div>
         <div class="controls">
           <div class="for-touch">
@@ -132,6 +139,8 @@
         var status = document.getElementById('status');
         var play = document.getElementById('play');
         play.textContent = touch ? 'TAP TO PLAY' : 'CLICK TO PLAY';
+        var playUnhinged = document.getElementById('play-unhinged');
+        playUnhinged.textContent = 'PLAY UNHINGED';
 
         // No page scrolling, pinch-zoom, long-press menus or double-tap zoom: every touch belongs to the game.
         // (Stopping the canvas's touchstart also stops the fake mouse clicks phones send after a tap.)
@@ -157,7 +166,7 @@
           streamingAssetsUrl: "StreamingAssets",
           companyName: "DefaultCompany",
           productName: "Protest Simulator",
-          productVersion: "0.10.0",
+          productVersion: "0.11.0",
           // Phones have very dense screens; drawing every pixel would cost frame rate for detail nobody sees.
           devicePixelRatio: touch ? Math.min(dpr, 1.5) : Math.min(dpr, 2),
         };
@@ -259,11 +268,12 @@
           fill.style.width = '100%';
           status.textContent = 'Ready.';
           play.classList.add('ready');
+          playUnhinged.classList.add('ready');
         }).catch(function (message) {
           status.textContent = 'It didn’t start: ' + message + ' (Phones with little memory may not manage it; try closing other tabs.)';
         });
 
-        play.addEventListener('click', function () {
+        var go = function (unhinged) {
           if (touch) {
             var el = document.documentElement;
             var req = el.requestFullscreen || el.webkitRequestFullscreen;
@@ -278,9 +288,11 @@
           canvas.focus();
           // In the game: the phone zooms in on our hero and play starts.
           note('playing');
-          try { if (instance) instance.SendMessage('TitleScreen', 'StartFromPage'); } catch (e) {}
+          try { if (instance) instance.SendMessage('TitleScreen', unhinged ? 'StartUnhingedFromPage' : 'StartFromPage'); } catch (e) {}
           setTimeout(function () { screenEl.style.display = 'none'; }, 400);
-        });
+        };
+        play.addEventListener('click', function () { go(false); });
+        playUnhinged.addEventListener('click', function () { go(true); });
       })();
     </script>
   </body>
