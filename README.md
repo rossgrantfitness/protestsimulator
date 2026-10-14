@@ -6,7 +6,7 @@
 
 A greybox prototype of a crowd-physics comedy: thousands of people marching through a fictional city ("Anywhere, USA"). Push through the crowd, pick things up, start trouble, get filmed. Everyone remembers who threw it.
 
-Works on phones (upright or sideways) and desktop browsers. Needs a browser with WebGL 2: an up-to-date Chrome, Safari, Edge or Firefox. On iPhone, tap Share â†’ Add to Home Screen to play full screen.
+Works on phones (upright or sideways) and desktop browsers. Needs a browser with WebGL 2: an up-to-date Chrome, Safari, Edge or Firefox. On iPhone, tap Share Ã¢â€ â€™ Add to Home Screen to play full screen.
 
 ## Controls
 
